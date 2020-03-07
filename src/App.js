@@ -18,6 +18,8 @@ const App = () => {
     isFetching: false
   })
 
+  const [allSpeciesOfRegion, setAllSpeciesOfRegion] = useState([])
+
   const REGIONS_API_URL = `http://apiv3.iucnredlist.org/api/v3/region/list?token=${process.env.REACT_APP_RED_LIST_API_TOKEN}`
   // console.log(process.env.RED_LIST_API_TOKEN)
   const SPECIES_BY_REGION = `http://apiv3.iucnredlist.org/api/v3/species/region/${randomRegion.region}/page/0?token=${process.env.REACT_APP_RED_LIST_API_TOKEN}`
@@ -82,6 +84,8 @@ const App = () => {
           return newSpecie
         })
 
+        setAllSpeciesOfRegion(speciesArray)
+
         // 5. Filter the results for Critically Endangered species
         const criticallyEndangeredSpecies = speciesArray.filter(
           specie => specie.category === 'CR'
@@ -139,6 +143,29 @@ const App = () => {
     fetchConservationMeasures()
   }, [fetchConservationMeasures])
 
+  // 6. Filter the results (from step 4) for the mammal class
+  const fetchMammalClass = useCallback(async () => {
+    try {
+      const response = await axios.get(
+        `http://apiv3.iucnredlist.org/api/v3/comp-group/getspecies/mammals?token=${process.env.REACT_APP_RED_LIST_API_TOKEN}`
+      )
+      console.log('fetchMammalClass', response)
+      const allMammalID = response.data.result.map(mammal => mammal.taxonid)
+      console.log('allMammalID', allMammalID)
+      console.log('allSpeciesOfRegion', allSpeciesOfRegion)
+      const onlyMammalSpeciesOfRegion = allSpeciesOfRegion.filter(specie => {
+        return allMammalID.includes(specie.id)
+      })
+      console.log('onlyMammalSpeciesOfRegion', onlyMammalSpeciesOfRegion)
+    } catch (error) {
+      console.log(error)
+    }
+  }, [allSpeciesOfRegion])
+
+  useEffect(() => {
+    fetchMammalClass()
+  }, [fetchMammalClass])
+
   return (
     <div className='App'>
       <h3>RANDOM REGION</h3>
@@ -147,6 +174,10 @@ const App = () => {
       ) : (
         <h5>{randomRegion.region}</h5>
       )}
+      <h3>Critically Endangered species</h3>
+      {criticallyEndangeredSpecies.species.map(specie => {
+        return <h5 key={specie.id}>{specie.scientific_name}</h5>
+      })}
     </div>
   )
 }
