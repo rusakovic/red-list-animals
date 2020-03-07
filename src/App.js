@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 
-import './App.css'
 import Specie from './models/specie'
+import Table from 'react-bootstrap/Table'
+import 'bootstrap/dist/css/bootstrap.min.css'
 
 const App = () => {
   const [randomRegion, setRandomRegion] = useState({
@@ -17,11 +18,11 @@ const App = () => {
     species: [],
     isFetching: false
   })
-
   const [allSpeciesOfRegion, setAllSpeciesOfRegion] = useState([])
+  const [mammalsOfRegion, setMammalsOfRegion] = useState([])
+  const [isFetchingMeasures, setIsFetchingMeasures] = useState(false)
 
   const REGIONS_API_URL = `http://apiv3.iucnredlist.org/api/v3/region/list?token=${process.env.REACT_APP_RED_LIST_API_TOKEN}`
-  // console.log(process.env.RED_LIST_API_TOKEN)
   const SPECIES_BY_REGION = `http://apiv3.iucnredlist.org/api/v3/species/region/${randomRegion.region}/page/0?token=${process.env.REACT_APP_RED_LIST_API_TOKEN}`
 
   // 1. Load the list of the available regions for species
@@ -66,7 +67,6 @@ const App = () => {
           }
         })
         const response = await axios.get(SPECIES_BY_REGION)
-        console.log(response)
 
         // 4. Create a model for “Species” and map the results to an array of Species.
         const speciesArray = response.data.result.map(specie => {
@@ -94,7 +94,6 @@ const App = () => {
           species: criticallyEndangeredSpecies,
           isFetching: false
         })
-        console.log(criticallyEndangeredSpecies)
       } catch (error) {
         console.log(error)
         setCriticallyEndangeredSpecies(prevState => {
@@ -105,7 +104,7 @@ const App = () => {
         })
       }
     }
-  }, [randomRegion.region])
+  }, [randomRegion.region, SPECIES_BY_REGION])
 
   useEffect(() => {
     fetchSpeciesFromSelectedRegion()
@@ -113,31 +112,29 @@ const App = () => {
 
   // 5.1 Fetch the conservation measures for all critically endangered species
   const fetchConservationMeasures = useCallback(async () => {
-    console.log('fetchConservationMeasures is called')
     if (criticallyEndangeredSpecies.species.length > 0) {
+      setIsFetchingMeasures(true)
       const speciesWithMeasures = await Promise.all(
         criticallyEndangeredSpecies.species.map(async specie => {
           const dynamicApiLink = `http://apiv3.iucnredlist.org/api/v3/measures/species/id/${specie.id}/region/${randomRegion.region}?token=${process.env.REACT_APP_RED_LIST_API_TOKEN}`
           const result = await axios.get(dynamicApiLink)
-          console.log(result)
           // 5.2. Store the “title”-s of the response in the Species model as concatenated text property.
           const allMeasuresTitles = result.data.result
             .map(measure => measure.title)
             .join('; ')
-          console.log(allMeasuresTitles)
           return {
             ...specie,
             conservation_measures: allMeasuresTitles
           }
         })
       )
-      console.log(speciesWithMeasures)
+      setIsFetchingMeasures(false)
       setCriticallyEndangeredSpecies({
         species: speciesWithMeasures,
         isFetching: false
       })
     }
-  }, [criticallyEndangeredSpecies.isFetching])
+  }, [criticallyEndangeredSpecies.isFetching, randomRegion.region])
 
   useEffect(() => {
     fetchConservationMeasures()
@@ -149,14 +146,11 @@ const App = () => {
       const response = await axios.get(
         `http://apiv3.iucnredlist.org/api/v3/comp-group/getspecies/mammals?token=${process.env.REACT_APP_RED_LIST_API_TOKEN}`
       )
-      console.log('fetchMammalClass', response)
       const allMammalID = response.data.result.map(mammal => mammal.taxonid)
-      console.log('allMammalID', allMammalID)
-      console.log('allSpeciesOfRegion', allSpeciesOfRegion)
       const onlyMammalSpeciesOfRegion = allSpeciesOfRegion.filter(specie => {
         return allMammalID.includes(specie.id)
       })
-      console.log('onlyMammalSpeciesOfRegion', onlyMammalSpeciesOfRegion)
+      setMammalsOfRegion(onlyMammalSpeciesOfRegion)
     } catch (error) {
       console.log(error)
     }
@@ -174,10 +168,61 @@ const App = () => {
       ) : (
         <h5>{randomRegion.region}</h5>
       )}
+
+      {/* 5.3 Print/display the results */}
       <h3>Critically Endangered species</h3>
-      {criticallyEndangeredSpecies.species.map(specie => {
-        return <h5 key={specie.id}>{specie.scientific_name}</h5>
-      })}
+      <Table striped bordered hover>
+        <thead>
+          <tr>
+            <th>id</th>
+            <th>Scientific name</th>
+            <th>Measures</th>
+          </tr>
+        </thead>
+        <tbody>
+          {criticallyEndangeredSpecies.species.map(specie => {
+            return (
+              <tr key={specie.id}>
+                <td>{specie.id}</td>
+                <td>{specie.scientific_name}</td>
+                <td>
+                  {isFetchingMeasures
+                    ? 'Loading...'
+                    : specie.conservation_measures}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </Table>
+
+      {/* 6.1. Print/display the results */}
+      <h3>Filter the results (from step 4) for the mammal class</h3>
+      {mammalsOfRegion.length > 0 ? (
+        <Table striped bordered hover>
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>Scientific name</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mammalsOfRegion.map(specie => {
+              return (
+                <tr key={specie.id}>
+                  <td>{specie.id}</td>
+                  <td>{specie.scientific_name}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </Table>
+      ) : (
+        <h5>
+          No mammal class in this list. But it's working! Try 'seagrasses' for
+          'mediterranean' region{' '}
+        </h5>
+      )}
     </div>
   )
 }
